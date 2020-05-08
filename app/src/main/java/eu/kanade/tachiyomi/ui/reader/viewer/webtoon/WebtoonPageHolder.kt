@@ -1,11 +1,8 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.annotation.SuppressLint
-import android.content.Intent
+import android.content.res.Resources
 import android.graphics.drawable.Drawable
-import android.net.Uri
-import android.support.v7.widget.AppCompatButton
-import android.support.v7.widget.AppCompatImageView
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -14,10 +11,13 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.widget.AppCompatButton
+import androidx.appcompat.widget.AppCompatImageView
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import com.bumptech.glide.load.resource.gif.GifDrawable
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.bumptech.glide.request.transition.NoTransition
@@ -28,16 +28,17 @@ import eu.kanade.tachiyomi.data.glide.GlideApp
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressBar
-import eu.kanade.tachiyomi.util.ImageUtil
-import eu.kanade.tachiyomi.util.dpToPx
-import eu.kanade.tachiyomi.util.gone
-import eu.kanade.tachiyomi.util.visible
+import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+import eu.kanade.tachiyomi.util.system.ImageUtil
+import eu.kanade.tachiyomi.util.system.dpToPx
+import eu.kanade.tachiyomi.util.view.gone
+import eu.kanade.tachiyomi.util.view.visible
+import java.io.InputStream
+import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
-import java.io.InputStream
-import java.util.concurrent.TimeUnit
 
 /**
  * Holder of the webtoon reader for a single page of a chapter.
@@ -47,8 +48,8 @@ import java.util.concurrent.TimeUnit
  * @constructor creates a new webtoon holder.
  */
 class WebtoonPageHolder(
-        private val frame: FrameLayout,
-        viewer: WebtoonViewer
+    private val frame: FrameLayout,
+    viewer: WebtoonViewer
 ) : WebtoonBaseHolder(frame, viewer) {
 
     /**
@@ -110,7 +111,7 @@ class WebtoonPageHolder(
     private var readImageHeaderSubscription: Subscription? = null
 
     init {
-        frame.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        refreshLayoutParams()
     }
 
     /**
@@ -119,6 +120,19 @@ class WebtoonPageHolder(
     fun bind(page: ReaderPage) {
         this.page = page
         observeStatus()
+        refreshLayoutParams()
+    }
+
+    private fun refreshLayoutParams() {
+        frame.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            if (!viewer.isContinuous) {
+                bottomMargin = 15.dpToPx
+            }
+
+            val margin = Resources.getSystem().displayMetrics.widthPixels * (viewer.config.sidePadding / 100f)
+            marginEnd = margin.toInt()
+            marginStart = margin.toInt()
+        }
     }
 
     /**
@@ -327,7 +341,7 @@ class WebtoonPageHolder(
             val size = 48.dpToPx
             layoutParams = FrameLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, parentHeight/4, 0, 0)
+                setMargins(0, parentHeight / 4, 0, 0)
             }
         }
         progressContainer.addView(progress)
@@ -388,7 +402,7 @@ class WebtoonPageHolder(
         AppCompatButton(context).apply {
             layoutParams = FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, parentHeight/4, 0, 0)
+                setMargins(0, parentHeight / 4, 0, 0)
             }
             setText(R.string.action_retry)
             setOnClickListener {
@@ -410,7 +424,7 @@ class WebtoonPageHolder(
 
         val decodeLayout = LinearLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, parentHeight).apply {
-                setMargins(0, parentHeight/6, 0, 0)
+                setMargins(0, parentHeight / 6, 0, 0)
             }
             gravity = Gravity.CENTER_HORIZONTAL
             orientation = LinearLayout.VERTICAL
@@ -440,14 +454,14 @@ class WebtoonPageHolder(
         }
 
         val imageUrl = page?.imageUrl
-        if (imageUrl.orEmpty().startsWith("http")) {
+        if (imageUrl.orEmpty().startsWith("http", true)) {
             AppCompatButton(context).apply {
                 layoutParams = FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
                     setMargins(0, margins, 0, margins)
                 }
-                setText(R.string.action_open_in_browser)
+                setText(R.string.action_open_in_web_view)
                 setOnClickListener {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(imageUrl))
+                    val intent = WebViewActivity.newIntent(context, imageUrl!!)
                     context.startActivity(intent)
                 }
 
@@ -481,27 +495,29 @@ class WebtoonPageHolder(
             .transition(DrawableTransitionOptions.with(NoTransition.getFactory()))
             .listener(object : RequestListener<Drawable> {
                 override fun onLoadFailed(
-                        e: GlideException?,
-                        model: Any?,
-                        target: Target<Drawable>?,
-                        isFirstResource: Boolean
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<Drawable>?,
+                    isFirstResource: Boolean
                 ): Boolean {
                     onImageDecodeError()
                     return false
                 }
 
                 override fun onResourceReady(
-                        resource: Drawable?,
-                        model: Any?,
-                        target: Target<Drawable>?,
-                        dataSource: DataSource?,
-                        isFirstResource: Boolean
+                    resource: Drawable?,
+                    model: Any?,
+                    target: Target<Drawable>?,
+                    dataSource: DataSource?,
+                    isFirstResource: Boolean
                 ): Boolean {
+                    if (resource is GifDrawable) {
+                        resource.setLoopCount(GifDrawable.LOOP_INTRINSIC)
+                    }
                     onImageDecoded()
                     return false
                 }
             })
             .into(this)
     }
-
 }

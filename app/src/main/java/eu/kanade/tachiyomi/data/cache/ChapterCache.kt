@@ -7,14 +7,15 @@ import com.google.gson.Gson
 import com.jakewharton.disklrucache.DiskLruCache
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.source.model.Page
-import eu.kanade.tachiyomi.util.DiskUtil
-import eu.kanade.tachiyomi.util.saveTo
-import okhttp3.Response
-import okio.Okio
-import rx.Observable
-import uy.kohesive.injekt.injectLazy
+import eu.kanade.tachiyomi.util.storage.DiskUtil
+import eu.kanade.tachiyomi.util.storage.saveTo
 import java.io.File
 import java.io.IOException
+import okhttp3.Response
+import okio.buffer
+import okio.sink
+import rx.Observable
+import uy.kohesive.injekt.injectLazy
 
 /**
  * Class used to create chapter cache
@@ -38,17 +39,19 @@ class ChapterCache(private val context: Context) {
         const val PARAMETER_VALUE_COUNT = 1
 
         /** The maximum number of bytes this cache should use to store.  */
-        const val PARAMETER_CACHE_SIZE = 75L * 1024 * 1024
+        const val PARAMETER_CACHE_SIZE = 100L * 1024 * 1024
     }
 
     /** Google Json class used for parsing JSON files.  */
     private val gson: Gson by injectLazy()
 
     /** Cache class used for cache management.  */
-    private val diskCache = DiskLruCache.open(File(context.cacheDir, PARAMETER_CACHE_DIRECTORY),
-            PARAMETER_APP_VERSION,
-            PARAMETER_VALUE_COUNT,
-            PARAMETER_CACHE_SIZE)
+    private val diskCache = DiskLruCache.open(
+        File(context.cacheDir, PARAMETER_CACHE_DIRECTORY),
+        PARAMETER_APP_VERSION,
+        PARAMETER_VALUE_COUNT,
+        PARAMETER_CACHE_SIZE
+    )
 
     /**
      * Returns directory of cache.
@@ -76,16 +79,17 @@ class ChapterCache(private val context: Context) {
      */
     fun removeFileFromCache(file: String): Boolean {
         // Make sure we don't delete the journal file (keeps track of cache).
-        if (file == "journal" || file.startsWith("journal."))
+        if (file == "journal" || file.startsWith("journal.")) {
             return false
+        }
 
-        try {
+        return try {
             // Remove the extension from the file to get the key of the cache
             val key = file.substringBeforeLast(".")
             // Remove file from cache.
-            return diskCache.remove(key)
+            diskCache.remove(key)
         } catch (e: Exception) {
-            return false
+            false
         }
     }
 
@@ -126,7 +130,7 @@ class ChapterCache(private val context: Context) {
             editor = diskCache.edit(key) ?: return
 
             // Write chapter urls to cache.
-            Okio.buffer(Okio.sink(editor.newOutputStream(0))).use {
+            editor.newOutputStream(0).sink().buffer().use {
                 it.write(cachedValue.toByteArray())
                 it.flush()
             }
@@ -134,7 +138,6 @@ class ChapterCache(private val context: Context) {
             diskCache.flush()
             editor.commit()
             editor.abortUnlessCommitted()
-
         } catch (e: Exception) {
             // Ignore.
         } finally {
@@ -149,10 +152,10 @@ class ChapterCache(private val context: Context) {
      * @return true if in cache otherwise false.
      */
     fun isImageInCache(imageUrl: String): Boolean {
-        try {
-            return diskCache.get(DiskUtil.hashKeyForDisk(imageUrl)) != null
+        return try {
+            diskCache.get(DiskUtil.hashKeyForDisk(imageUrl)) != null
         } catch (e: IOException) {
-            return false
+            false
         }
     }
 
@@ -170,7 +173,7 @@ class ChapterCache(private val context: Context) {
 
     /**
      * Add image to cache.
-     * 
+     *
      * @param imageUrl url of image.
      * @param response http response from page.
      * @throws IOException image error.
@@ -186,12 +189,12 @@ class ChapterCache(private val context: Context) {
             editor = diskCache.edit(key) ?: throw IOException("Unable to edit key")
 
             // Get OutputStream and write image with Okio.
-            response.body()!!.source().saveTo(editor.newOutputStream(0))
+            response.body!!.source().saveTo(editor.newOutputStream(0))
 
             diskCache.flush()
             editor.commit()
         } finally {
-            response.body()?.close()
+            response.body?.close()
             editor?.abortUnlessCommitted()
         }
     }
@@ -200,4 +203,3 @@ class ChapterCache(private val context: Context) {
         return "${chapter.manga_id}${chapter.url}"
     }
 }
-

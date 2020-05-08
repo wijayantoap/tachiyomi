@@ -5,17 +5,20 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.newCallWithProgress
 import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.source.model.*
+import eu.kanade.tachiyomi.source.model.FilterList
+import eu.kanade.tachiyomi.source.model.MangasPage
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.model.SChapter
+import eu.kanade.tachiyomi.source.model.SManga
+import java.net.URI
+import java.net.URISyntaxException
+import java.security.MessageDigest
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import rx.Observable
 import uy.kohesive.injekt.injectLazy
-import java.lang.Exception
-import java.net.URI
-import java.net.URISyntaxException
-import java.security.MessageDigest
 
 /**
  * A simple implementation for sources from a website.
@@ -70,8 +73,8 @@ abstract class HttpSource : CatalogueSource {
     /**
      * Headers builder for requests. Implementations can override this method for custom headers.
      */
-    open protected fun headersBuilder() = Headers.Builder().apply {
-        add("User-Agent", "Mozilla/5.0 (Windows NT 6.3; WOW64)")
+    protected open fun headersBuilder() = Headers.Builder().apply {
+        add("User-Agent", DEFAULT_USERAGENT)
     }
 
     /**
@@ -87,10 +90,10 @@ abstract class HttpSource : CatalogueSource {
      */
     override fun fetchPopularManga(page: Int): Observable<MangasPage> {
         return client.newCall(popularMangaRequest(page))
-                .asObservableSuccess()
-                .map { response ->
-                    popularMangaParse(response)
-                }
+            .asObservableSuccess()
+            .map { response ->
+                popularMangaParse(response)
+            }
     }
 
     /**
@@ -98,14 +101,14 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param page the page number to retrieve.
      */
-    abstract protected fun popularMangaRequest(page: Int): Request
+    protected abstract fun popularMangaRequest(page: Int): Request
 
     /**
      * Parses the response from the site and returns a [MangasPage] object.
      *
      * @param response the response from the site.
      */
-    abstract protected fun popularMangaParse(response: Response): MangasPage
+    protected abstract fun popularMangaParse(response: Response): MangasPage
 
     /**
      * Returns an observable containing a page with a list of manga. Normally it's not needed to
@@ -117,10 +120,10 @@ abstract class HttpSource : CatalogueSource {
      */
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
         return client.newCall(searchMangaRequest(page, query, filters))
-                .asObservableSuccess()
-                .map { response ->
-                    searchMangaParse(response)
-                }
+            .asObservableSuccess()
+            .map { response ->
+                searchMangaParse(response)
+            }
     }
 
     /**
@@ -130,14 +133,14 @@ abstract class HttpSource : CatalogueSource {
      * @param query the search query.
      * @param filters the list of filters to apply.
      */
-    abstract protected fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request
+    protected abstract fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request
 
     /**
      * Parses the response from the site and returns a [MangasPage] object.
      *
      * @param response the response from the site.
      */
-    abstract protected fun searchMangaParse(response: Response): MangasPage
+    protected abstract fun searchMangaParse(response: Response): MangasPage
 
     /**
      * Returns an observable containing a page with a list of latest manga updates.
@@ -146,10 +149,10 @@ abstract class HttpSource : CatalogueSource {
      */
     override fun fetchLatestUpdates(page: Int): Observable<MangasPage> {
         return client.newCall(latestUpdatesRequest(page))
-                .asObservableSuccess()
-                .map { response ->
-                    latestUpdatesParse(response)
-                }
+            .asObservableSuccess()
+            .map { response ->
+                latestUpdatesParse(response)
+            }
     }
 
     /**
@@ -157,14 +160,14 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param page the page number to retrieve.
      */
-    abstract protected fun latestUpdatesRequest(page: Int): Request
+    protected abstract fun latestUpdatesRequest(page: Int): Request
 
     /**
      * Parses the response from the site and returns a [MangasPage] object.
      *
      * @param response the response from the site.
      */
-    abstract protected fun latestUpdatesParse(response: Response): MangasPage
+    protected abstract fun latestUpdatesParse(response: Response): MangasPage
 
     /**
      * Returns an observable with the updated details for a manga. Normally it's not needed to
@@ -174,10 +177,10 @@ abstract class HttpSource : CatalogueSource {
      */
     override fun fetchMangaDetails(manga: SManga): Observable<SManga> {
         return client.newCall(mangaDetailsRequest(manga))
-                .asObservableSuccess()
-                .map { response ->
-                    mangaDetailsParse(response).apply { initialized = true }
-                }
+            .asObservableSuccess()
+            .map { response ->
+                mangaDetailsParse(response).apply { initialized = true }
+            }
     }
 
     /**
@@ -195,7 +198,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param response the response from the site.
      */
-    abstract protected fun mangaDetailsParse(response: Response): SManga
+    protected abstract fun mangaDetailsParse(response: Response): SManga
 
     /**
      * Returns an observable with the updated chapter list for a manga. Normally it's not needed to
@@ -204,14 +207,14 @@ abstract class HttpSource : CatalogueSource {
      * @param manga the manga to look for chapters.
      */
     override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> {
-        if (manga.status != SManga.LICENSED) {
-            return client.newCall(chapterListRequest(manga))
-                    .asObservableSuccess()
-                    .map { response ->
-                        chapterListParse(response)
-                    }
+        return if (manga.status != SManga.LICENSED) {
+            client.newCall(chapterListRequest(manga))
+                .asObservableSuccess()
+                .map { response ->
+                    chapterListParse(response)
+                }
         } else {
-            return Observable.error(Exception("Licensed - No chapters to show"))
+            Observable.error(Exception("Licensed - No chapters to show"))
         }
     }
 
@@ -221,7 +224,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param manga the manga to look for chapters.
      */
-    open protected fun chapterListRequest(manga: SManga): Request {
+    protected open fun chapterListRequest(manga: SManga): Request {
         return GET(baseUrl + manga.url, headers)
     }
 
@@ -230,7 +233,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param response the response from the site.
      */
-    abstract protected fun chapterListParse(response: Response): List<SChapter>
+    protected abstract fun chapterListParse(response: Response): List<SChapter>
 
     /**
      * Returns an observable with the page list for a chapter.
@@ -239,10 +242,10 @@ abstract class HttpSource : CatalogueSource {
      */
     override fun fetchPageList(chapter: SChapter): Observable<List<Page>> {
         return client.newCall(pageListRequest(chapter))
-                .asObservableSuccess()
-                .map { response ->
-                    pageListParse(response)
-                }
+            .asObservableSuccess()
+            .map { response ->
+                pageListParse(response)
+            }
     }
 
     /**
@@ -251,7 +254,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param chapter the chapter whose page list has to be fetched.
      */
-    open protected fun pageListRequest(chapter: SChapter): Request {
+    protected open fun pageListRequest(chapter: SChapter): Request {
         return GET(baseUrl + chapter.url, headers)
     }
 
@@ -260,7 +263,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param response the response from the site.
      */
-    abstract protected fun pageListParse(response: Response): List<Page>
+    protected abstract fun pageListParse(response: Response): List<Page>
 
     /**
      * Returns an observable with the page containing the source url of the image. If there's any
@@ -270,8 +273,8 @@ abstract class HttpSource : CatalogueSource {
      */
     open fun fetchImageUrl(page: Page): Observable<String> {
         return client.newCall(imageUrlRequest(page))
-                .asObservableSuccess()
-                .map { imageUrlParse(it) }
+            .asObservableSuccess()
+            .map { imageUrlParse(it) }
     }
 
     /**
@@ -280,7 +283,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param page the chapter whose page list has to be fetched
      */
-    open protected fun imageUrlRequest(page: Page): Request {
+    protected open fun imageUrlRequest(page: Page): Request {
         return GET(page.url, headers)
     }
 
@@ -289,7 +292,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param response the response from the site.
      */
-    abstract protected fun imageUrlParse(response: Response): String
+    protected abstract fun imageUrlParse(response: Response): String
 
     /**
      * Returns an observable with the response of the source image.
@@ -298,7 +301,7 @@ abstract class HttpSource : CatalogueSource {
      */
     fun fetchImage(page: Page): Observable<Response> {
         return client.newCallWithProgress(imageRequest(page), page)
-                .asObservableSuccess()
+            .asObservableSuccess()
     }
 
     /**
@@ -307,7 +310,7 @@ abstract class HttpSource : CatalogueSource {
      *
      * @param page the chapter whose page list has to be fetched
      */
-    open protected fun imageRequest(page: Page): Request {
+    protected open fun imageRequest(page: Page): Request {
         return GET(page.imageUrl!!, headers)
     }
 
@@ -337,16 +340,18 @@ abstract class HttpSource : CatalogueSource {
      * @param orig the full url.
      */
     private fun getUrlWithoutDomain(orig: String): String {
-        try {
+        return try {
             val uri = URI(orig)
             var out = uri.path
-            if (uri.query != null)
+            if (uri.query != null) {
                 out += "?" + uri.query
-            if (uri.fragment != null)
+            }
+            if (uri.fragment != null) {
                 out += "#" + uri.fragment
-            return out
+            }
+            out
         } catch (e: URISyntaxException) {
-            return orig
+            orig
         }
     }
 
@@ -364,4 +369,8 @@ abstract class HttpSource : CatalogueSource {
      * Returns the list of filters for the source.
      */
     override fun getFilterList() = FilterList()
+
+    companion object {
+        const val DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 6.3; WOW64)"
+    }
 }

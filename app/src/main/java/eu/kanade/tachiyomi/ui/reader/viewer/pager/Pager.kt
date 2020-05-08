@@ -1,10 +1,10 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.content.Context
-import android.support.v4.view.DirectionalViewPager
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
+import androidx.viewpager.widget.DirectionalViewPager
 import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
 
 /**
@@ -13,8 +13,8 @@ import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
  * pager can also be declared to be vertical by creating it with [isHorizontal] to false.
  */
 open class Pager(
-        context: Context,
-        isHorizontal: Boolean = true
+    context: Context,
+    isHorizontal: Boolean = true
 ) : DirectionalViewPager(context, isHorizontal) {
 
     /**
@@ -25,7 +25,7 @@ open class Pager(
     /**
      * Long tap listener function to execute when a long tap is detected.
      */
-    var longTapListener: ((MotionEvent) -> Unit)? = null
+    var longTapListener: ((MotionEvent) -> Boolean)? = null
 
     /**
      * Gesture listener that implements tap and long tap events.
@@ -38,8 +38,7 @@ open class Pager(
 
         override fun onLongTapConfirmed(ev: MotionEvent) {
             val listener = longTapListener
-            if (listener != null) {
-                listener.invoke(ev)
+            if (listener != null && listener.invoke(ev)) {
                 performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             }
         }
@@ -105,5 +104,4 @@ open class Pager(
     fun setGestureDetectorEnabled(enabled: Boolean) {
         isGestureDetectorEnabled = enabled
     }
-
 }

@@ -1,10 +1,10 @@
 package eu.kanade.tachiyomi.data.track
 
-import android.support.annotation.CallSuper
-import android.support.annotation.DrawableRes
+import androidx.annotation.CallSuper
+import androidx.annotation.DrawableRes
 import eu.kanade.tachiyomi.data.database.models.Track
-import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.network.NetworkHelper
 import okhttp3.OkHttpClient
 import rx.Completable
@@ -22,6 +22,9 @@ abstract class TrackService(val id: Int) {
     // Name of the manga sync service to display
     abstract val name: String
 
+    // Application and remote support for reading dates
+    open val supportsReadingDates: Boolean = false
+
     @DrawableRes
     abstract fun getLogo(): Int
 
@@ -30,6 +33,8 @@ abstract class TrackService(val id: Int) {
     abstract fun getStatusList(): List<Int>
 
     abstract fun getStatus(status: Int): String
+
+    abstract fun getCompletionStatus(): Int
 
     abstract fun getScoreList(): List<String>
 
@@ -57,15 +62,14 @@ abstract class TrackService(val id: Int) {
     }
 
     open val isLogged: Boolean
-        get() = !getUsername().isEmpty() &&
-                !getPassword().isEmpty()
+        get() = getUsername().isNotEmpty() &&
+            getPassword().isNotEmpty()
 
-    fun getUsername() = preferences.trackUsername(this)
+    fun getUsername() = preferences.trackUsername(this)!!
 
-    fun getPassword() = preferences.trackPassword(this)
+    fun getPassword() = preferences.trackPassword(this)!!
 
     fun saveCredentials(username: String, password: String) {
         preferences.setTrackCredentials(this, username, password)
     }
-
 }

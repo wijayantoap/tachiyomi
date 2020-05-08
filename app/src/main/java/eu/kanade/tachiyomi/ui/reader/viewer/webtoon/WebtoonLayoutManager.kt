@@ -1,8 +1,8 @@
 @file:Suppress("PackageDirectoryMismatch")
 
-package android.support.v7.widget
+package androidx.recyclerview.widget
 
-import android.support.v7.widget.RecyclerView.NO_POSITION
+import androidx.recyclerview.widget.RecyclerView.NO_POSITION
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 
 /**
@@ -37,19 +37,19 @@ class WebtoonLayoutManager(activity: ReaderActivity) : LinearLayoutManager(activ
     fun findLastEndVisibleItemPosition(): Int {
         ensureLayoutState()
         @ViewBoundsCheck.ViewBounds val preferredBoundsFlag =
-                (ViewBoundsCheck.FLAG_CVE_LT_PVE or ViewBoundsCheck.FLAG_CVE_EQ_PVE)
+            (ViewBoundsCheck.FLAG_CVE_LT_PVE or ViewBoundsCheck.FLAG_CVE_EQ_PVE)
 
         val fromIndex = childCount - 1
         val toIndex = -1
 
-        val child = if (mOrientation == HORIZONTAL)
+        val child = if (mOrientation == HORIZONTAL) {
             mHorizontalBoundCheck
                 .findOneViewWithinBoundFlags(fromIndex, toIndex, preferredBoundsFlag, 0)
-        else
+        } else {
             mVerticalBoundCheck
                 .findOneViewWithinBoundFlags(fromIndex, toIndex, preferredBoundsFlag, 0)
+        }
 
         return if (child == null) NO_POSITION else getPosition(child)
     }
-
 }

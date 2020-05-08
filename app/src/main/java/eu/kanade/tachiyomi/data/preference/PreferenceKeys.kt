@@ -5,7 +5,13 @@ package eu.kanade.tachiyomi.data.preference
  */
 object PreferenceKeys {
 
-    const val theme = "pref_theme_key"
+    const val themeMode = "pref_theme_mode_key"
+
+    const val themeLight = "pref_theme_light_key"
+
+    const val themeDark = "pref_theme_dark_key"
+
+    const val confirmExit = "pref_confirm_exit"
 
     const val rotation = "pref_rotation_type_key"
 
@@ -15,7 +21,11 @@ object PreferenceKeys {
 
     const val showPageNumber = "pref_show_page_number_key"
 
+    const val trueColor = "pref_true_color_key"
+
     const val fullscreen = "fullscreen"
+
+    const val cutoutShort = "cutout_short"
 
     const val keepScreenOn = "pref_keep_screen_on_key"
 
@@ -26,6 +36,8 @@ object PreferenceKeys {
     const val colorFilter = "pref_color_filter_key"
 
     const val colorFilterValue = "color_filter_value"
+
+    const val colorFilterMode = "color_filter_mode"
 
     const val defaultViewer = "pref_default_viewer_key"
 
@@ -41,9 +53,13 @@ object PreferenceKeys {
 
     const val readWithTapping = "reader_tap"
 
+    const val readWithLongTap = "reader_long_tap"
+
     const val readWithVolumeKeys = "reader_volume_keys"
 
     const val readWithVolumeKeysInverted = "reader_volume_keys_inverted"
+
+    const val webtoonSidePadding = "webtoon_side_padding"
 
     const val portraitColumns = "pref_library_columns_portrait_key"
 
@@ -81,6 +97,10 @@ object PreferenceKeys {
 
     const val libraryUpdateCategories = "library_update_categories"
 
+    const val libraryUpdatePrioritization = "library_update_prioritization"
+
+    const val downloadedOnly = "pref_downloaded_only"
+
     const val filterDownloaded = "pref_filter_downloaded_key"
 
     const val filterUnread = "pref_filter_unread_key"
@@ -89,9 +109,19 @@ object PreferenceKeys {
 
     const val librarySortingMode = "library_sorting_mode"
 
-    const val automaticUpdates = "automatic_updates"
+    const val automaticExtUpdates = "automatic_ext_updates"
 
     const val startScreen = "start_screen"
+
+    const val useBiometricLock = "use_biometric_lock"
+
+    const val lockAppAfter = "lock_app_after"
+
+    const val lastAppUnlock = "last_app_unlock"
+
+    const val secureScreen = "secure_screen"
+
+    const val hideNotificationContent = "hide_notification_content"
 
     const val downloadNew = "download_new"
 
@@ -101,22 +131,23 @@ object PreferenceKeys {
 
     const val lang = "app_language"
 
+    const val dateFormat = "app_date_format"
+
     const val defaultCategory = "default_category"
+
+    const val skipRead = "skip_read"
+
+    const val skipFiltered = "skip_filtered"
 
     const val downloadBadge = "display_download_badge"
 
-    @Deprecated("Use the preferences of the source")
-    fun sourceUsername(sourceId: Long) = "pref_source_username_$sourceId"
+    const val alwaysShowChapterTransition = "always_show_chapter_transition"
 
-    @Deprecated("Use the preferences of the source")
-    fun sourcePassword(sourceId: Long) = "pref_source_password_$sourceId"
-
-    fun sourceSharedPref(sourceId: Long) = "source_$sourceId"
+    const val searchPinnedSourcesOnly = "search_pinned_sources_only"
 
     fun trackUsername(syncId: Int) = "pref_mangasync_username_$syncId"
 
     fun trackPassword(syncId: Int) = "pref_mangasync_password_$syncId"
 
     fun trackToken(syncId: Int) = "track_token_$syncId"
-
 }

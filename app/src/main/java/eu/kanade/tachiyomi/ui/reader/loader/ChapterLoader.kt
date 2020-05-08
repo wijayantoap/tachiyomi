@@ -16,9 +16,9 @@ import timber.log.Timber
  * Loader used to retrieve the [PageLoader] for a given chapter.
  */
 class ChapterLoader(
-        private val downloadManager: DownloadManager,
-        private val manga: Manga,
-        private val source: Source
+    private val downloadManager: DownloadManager,
+    private val manga: Manga,
+    private val source: Source
 ) {
 
     /**
@@ -26,17 +26,17 @@ class ChapterLoader(
      * completes if the chapter is already loaded.
      */
     fun loadChapter(chapter: ReaderChapter): Completable {
-        if (chapter.state is ReaderChapter.State.Loaded) {
+        if (chapterIsReady(chapter)) {
             return Completable.complete()
         }
 
         return Observable.just(chapter)
             .doOnNext { chapter.state = ReaderChapter.State.Loading }
             .observeOn(Schedulers.io())
-            .flatMap {
+            .flatMap { readerChapter ->
                 Timber.d("Loading pages for ${chapter.chapter.name}")
 
-                val loader = getPageLoader(it)
+                val loader = getPageLoader(readerChapter)
                 chapter.pageLoader = loader
 
                 loader.getPages().take(1).doOnNext { pages ->
@@ -62,6 +62,13 @@ class ChapterLoader(
     }
 
     /**
+     * Checks [chapter] to be loaded based on present pages and loader in addition to state.
+     */
+    private fun chapterIsReady(chapter: ReaderChapter): Boolean {
+        return chapter.state is ReaderChapter.State.Loaded && chapter.pageLoader != null
+    }
+
+    /**
      * Returns the page loader to use for this [chapter].
      */
     private fun getPageLoader(chapter: ReaderChapter): PageLoader {
@@ -80,5 +87,4 @@ class ChapterLoader(
             else -> error("Loader not implemented")
         }
     }
-
 }

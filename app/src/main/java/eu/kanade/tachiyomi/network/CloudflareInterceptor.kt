@@ -1,76 +1,164 @@
 package eu.kanade.tachiyomi.network
 
-import com.squareup.duktape.Duktape
-import okhttp3.CacheControl
-import okhttp3.HttpUrl
+import android.annotation.SuppressLint
+import android.content.Context
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.widget.Toast
+import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.util.system.WebViewClientCompat
+import eu.kanade.tachiyomi.util.system.isOutdated
+import eu.kanade.tachiyomi.util.system.toast
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import okhttp3.Cookie
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import uy.kohesive.injekt.injectLazy
 
-class CloudflareInterceptor : Interceptor {
+class CloudflareInterceptor(private val context: Context) : Interceptor {
 
-    private val operationPattern = Regex("""setTimeout\(function\(\)\{\s+(var (?:\w,)+f.+?\r?\n[\s\S]+?a\.value =.+?)\r?\n""")
-    
-    private val passPattern = Regex("""name="pass" value="(.+?)"""")
+    private val handler = Handler(Looper.getMainLooper())
 
-    private val challengePattern = Regex("""name="jschl_vc" value="(\w+)"""")
+    private val networkHelper: NetworkHelper by injectLazy()
 
-    private val serverCheck = arrayOf("cloudflare-nginx", "cloudflare")
+    /**
+     * When this is called, it initializes the WebView if it wasn't already. We use this to avoid
+     * blocking the main thread too much. If used too often we could consider moving it to the
+     * Application class.
+     */
+    private val initWebView by lazy {
+        WebSettings.getDefaultUserAgent(context)
+    }
 
     @Synchronized
     override fun intercept(chain: Interceptor.Chain): Response {
-        val response = chain.proceed(chain.request())
+        initWebView
+
+        val originalRequest = chain.request()
+        val response = chain.proceed(originalRequest)
 
         // Check if Cloudflare anti-bot is on
-        if (response.code() == 503 && response.header("Server") in serverCheck) {
-            return chain.proceed(resolveChallenge(response))
+        if (response.code != 503 || response.header("Server") !in SERVER_CHECK) {
+            return response
         }
 
-        return response
+        try {
+            response.close()
+            networkHelper.cookieManager.remove(originalRequest.url, COOKIE_NAMES, 0)
+            val oldCookie = networkHelper.cookieManager.get(originalRequest.url)
+                .firstOrNull { it.name == "cf_clearance" }
+            resolveWithWebView(originalRequest, oldCookie)
+
+            return chain.proceed(originalRequest)
+        } catch (e: Exception) {
+            // Because OkHttp's enqueue only handles IOExceptions, wrap the exception so that
+            // we don't crash the entire app
+            throw IOException(e)
+        }
     }
 
-    private fun resolveChallenge(response: Response): Request {
-        Duktape.create().use { duktape ->
-            val originalRequest = response.request()
-            val url = originalRequest.url()
-            val domain = url.host()
-            val content = response.body()!!.string()
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun resolveWithWebView(request: Request, oldCookie: Cookie?) {
+        // We need to lock this thread until the WebView finds the challenge solution url, because
+        // OkHttp doesn't support asynchronous interceptors.
+        val latch = CountDownLatch(1)
 
-            // CloudFlare requires waiting 4 seconds before resolving the challenge
-            Thread.sleep(4000)
+        var webView: WebView? = null
 
-            val operation = operationPattern.find(content)?.groups?.get(1)?.value
-            val challenge = challengePattern.find(content)?.groups?.get(1)?.value
-            val pass = passPattern.find(content)?.groups?.get(1)?.value
+        var challengeFound = false
+        var cloudflareBypassed = false
+        var isWebViewOutdated = false
 
-            if (operation == null || challenge == null || pass == null) {
-                throw Exception("Failed resolving Cloudflare challenge")
+        val origRequestUrl = request.url.toString()
+        val headers = request.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
+
+        handler.post {
+            val webview = WebView(context)
+            webView = webview
+            webview.settings.javaScriptEnabled = true
+
+            // Avoid set empty User-Agent, Chromium WebView will reset to default if empty
+            webview.settings.userAgentString = request.header("User-Agent")
+                ?: HttpSource.DEFAULT_USERAGENT
+
+            webview.webViewClient = object : WebViewClientCompat() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    fun isCloudFlareBypassed(): Boolean {
+                        return networkHelper.cookieManager.get(origRequestUrl.toHttpUrl())
+                            .firstOrNull { it.name == "cf_clearance" }
+                            .let { it != null && it != oldCookie }
+                    }
+
+                    if (isCloudFlareBypassed()) {
+                        cloudflareBypassed = true
+                        latch.countDown()
+                    }
+
+                    // HTTP error codes are only received since M
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                        url == origRequestUrl && !challengeFound
+                    ) {
+                        // The first request didn't return the challenge, abort.
+                        latch.countDown()
+                    }
+                }
+
+                override fun onReceivedErrorCompat(
+                    view: WebView,
+                    errorCode: Int,
+                    description: String?,
+                    failingUrl: String,
+                    isMainFrame: Boolean
+                ) {
+                    if (isMainFrame) {
+                        if (errorCode == 503) {
+                            // Found the cloudflare challenge page.
+                            challengeFound = true
+                        } else {
+                            // Unlock thread, the challenge wasn't found.
+                            latch.countDown()
+                        }
+                    }
+                }
             }
 
-            val js = operation
-                    .replace(Regex("""a\.value = (.+ \+ t\.length).+"""), "$1")
-                    .replace(Regex("""\s{3,}[a-z](?: = |\.).+"""), "")
-                    .replace("t.length", "${domain.length}")
-                    .replace("\n", "")
+            webView?.loadUrl(origRequestUrl, headers)
+        }
 
-            val result = duktape.evaluate(js) as Double
+        // Wait a reasonable amount of time to retrieve the solution. The minimum should be
+        // around 4 seconds but it can take more due to slow networks or server issues.
+        latch.await(12, TimeUnit.SECONDS)
 
-            val cloudflareUrl = HttpUrl.parse("${url.scheme()}://$domain/cdn-cgi/l/chk_jschl")!!
-                    .newBuilder()
-                    .addQueryParameter("jschl_vc", challenge)
-                    .addQueryParameter("pass", pass)
-                    .addQueryParameter("jschl_answer", "$result")
-                    .toString()
+        handler.post {
+            if (!cloudflareBypassed) {
+                isWebViewOutdated = webView?.isOutdated() == true
+            }
 
-            val cloudflareHeaders = originalRequest.headers()
-                    .newBuilder()
-                    .add("Referer", url.toString())
-                    .add("Accept", "text/html,application/xhtml+xml,application/xml")
-                    .add("Accept-Language", "en")
-                    .build()
+            webView?.stopLoading()
+            webView?.destroy()
+        }
 
-            return GET(cloudflareUrl, cloudflareHeaders, cache = CacheControl.Builder().build())
+        // Throw exception if we failed to bypass Cloudflare
+        if (!cloudflareBypassed) {
+            // Prompt user to update WebView if it seems too outdated
+            if (isWebViewOutdated) {
+                context.toast(R.string.information_webview_outdated, Toast.LENGTH_LONG)
+            }
+
+            throw Exception(context.getString(R.string.information_cloudflare_bypass_failure))
         }
     }
 
+    companion object {
+        private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
+        private val COOKIE_NAMES = listOf("__cfduid", "cf_clearance")
+    }
 }

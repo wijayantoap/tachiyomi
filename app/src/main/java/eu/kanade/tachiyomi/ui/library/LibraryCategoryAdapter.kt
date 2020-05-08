@@ -9,7 +9,7 @@ import eu.kanade.tachiyomi.data.database.models.Manga
  * @param view the fragment containing this adapter.
  */
 class LibraryCategoryAdapter(view: LibraryCategoryView) :
-        FlexibleAdapter<LibraryItem>(null, view, true) {
+    FlexibleAdapter<LibraryItem>(null, view, true) {
 
     /**
      * The list of manga in this category.
@@ -38,7 +38,10 @@ class LibraryCategoryAdapter(view: LibraryCategoryView) :
     }
 
     fun performFilter() {
-        updateDataSet(mangas.filter { it.filter(searchText) })
+        var s = getFilter(String::class.java)
+        if (s == null) {
+            s = ""
+        }
+        updateDataSet(mangas.filter { it.filter(s) })
     }
-
 }
